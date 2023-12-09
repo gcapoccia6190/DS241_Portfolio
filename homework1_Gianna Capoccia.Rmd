@@ -1,0 +1,358 @@
+---
+title: "Homework 1"
+author: "Gianna Capoccia"
+date: 'Octobr 18, 2023'
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    theme: cerulean
+    highlight: tango
+---
+
+##### Citation
+
+This homework assignment is largely borrowed from Coursework created Prof. Alexandra Chouldechova at Carnegie Mellon University.  I have modified slightly and am using in accordance with the Creative Commons License:
+
+ 
+Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License(http://creativecommons.org/licenses/by-nc-sa/4.0/)
+
+
+
+##### Homework tips:
+
+1. Recall the following useful RStudio hotkeys.
+
+Keystroke | Description
+------------|-------------------------------------------
+`<tab>` | Autocompletes commands and filenames, and lists arguments for functions.
+`<up>` | Cycles through previous commands in the console prompt
+`<ctrl-up>` | Lists history of previous commands matching an unfinished one
+`<ctrl-enter>` | Runs current line from source window to Console. Good for trying things out ideas from a source file.
+`<ESC>` | Aborts an unfinished command and get out of the + prompt
+
+**Note**: Shown above are the Windows/Linux keys.  For Mac OS X, the `<ctrl>` key should be substituted with the `<command>` (&#8984;) key.
+
+2. Instead of sending code line-by-line with `<ctrl-enter>`, you can send entire code chunks, and even run all of the code chunks in your .Rmd file. Look under the <Chunks> menu of the Source panel.
+
+3. Run your code in the Console and Knit HTML frequently to check for errors.
+
+4. You may find it easier to solve a problem by interacting only with the Console at first, or by creating a separate `.R` source file that contains only R code and no Markdown.
+
+### Housekeeping - packages to be used.
+
+We will give preference to the "tidyverse" of packages related to "Tidy Data."  
+
+
+```{r}
+library(knitr)
+library(tidyverse) # loads ggplot2, dplyr,tidyr,readr,purr,tibble
+
+library(broom)  # because I find it useful
+
+cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")  
+
+options(scipen = 4)  # make output prefer not to use scientific notation
+```
+
+### Introduction: Bikeshare data
+
+For this problem we'll be working with two years of bikeshare data from the Capital Bikeshare system in Washington DC.  The dataset contains daily bikeshare counts, along with daily measurements on environmental and seasonal information that may affect the bikesharing.  
+
+### Data pre-processing 
+
+Let's start by loading the data.
+
+```{r}
+bikes <- read.csv("http://www.andrew.cmu.edu/user/achoulde/95791/data/bikes.csv", header = TRUE)
+
+# Transform temp and atemp to degrees C instead of [0,1] scale
+# Transform humidity to %
+# Transform wind speed (multiply by 67, the normalizing value)
+
+bikes <- mutate(bikes,
+                   temp = 47 * temp - 8,
+                   atemp = 66 * atemp - 16,
+                   hum = 100 * hum,
+                   windspeed = 67 * windspeed)
+
+# The recode() command from the dplyr library allows us to easily
+# rename values in our variables.  Below we use this command to change season
+# from numeric codings to season names.
+
+bikes <- mutate(bikes, 
+                   season = recode(season, `1`="Winter",`2`="Spring",
+                                      `3`="Summer", `4`="Fall"))
+```
+
+Let's look at some boxplots of how bikeshare ride count varies with season.
+
+```{r, fig.height = 4, fig.width = 5} 
+qplot(data = bikes, x = season, y = cnt, fill = I(cbPalette[3]), geom = "boxplot")
+```
+
+There's something funny going on here.  Instead of showing up in seasonal order, the seasons in the plot are showing up in **alphabetical order**.  The following command reorders the seasons appropriately.
+
+```{r}
+bikes <- mutate(bikes, season = factor(season, levels = c("Winter", "Spring", "Summer", "Fall")))
+```
+
+Now let's try that plot again.
+
+```{r, fig.height = 4, fig.width = 5} 
+qplot(data = bikes, x = season, y = cnt, fill = I(cbPalette[3]), geom = "boxplot")
+```
+
+Here's information on what the variables mean.
+
+  - instant: record index
+	- dteday : date
+	- season : season (1:Winter, 2:Spring, 3:Summer, 4:Fall)
+	- yr : year (0: 2011, 1:2012)
+	- mnth : month ( 1 to 12)
+	- hr : hour (0 to 23)
+	- holiday : weather day is holiday or not (extracted from http://dchr.dc.gov/page/holiday-schedule)
+	- weekday : day of the week
+	- workingday : if day is neither weekend nor holiday is 1, otherwise is 0.
+	+ weathersit : 
+		- 1: Clear, Few clouds, Partly cloudy, Partly cloudy
+		- 2: Mist + Cloudy, Mist + Broken clouds, Mist + Few clouds, Mist
+		- 3: Light Snow, Light Rain + Thunderstorm + Scattered clouds, Light Rain + Scattered clouds
+		- 4: Heavy Rain + Ice Pallets + Thunderstorm + Mist, Snow + Fog
+	- temp : Temperature in Celsius. 
+	- atemp: `feels like' temperature in Celsius. 
+	- hum: Normalized humidity. The values are divided to 100 (max)
+	- windspeed: Normalized wind speed. The values are divided to 67 (max)
+	- casual: count of casual users
+	- registered: count of registered users
+	- cnt: count of total rental bikes including both casual and registered
+
+### Problem 1: Qualitative predictors
+
+> The Season variable is an example of what's called a *qualitative* or *categorical* predictor.  In R, such variables are called `factors`.  This problems gets to fit a model with a qualitative predictor and to interpret the findings.
+
+
+##### **(a)** Suppose we were interested in predicting the count of total bike rentals by using the *season* as the predictor.  Fit a linear (using the lm command) regression model with `cnt` as the response and `season` as the input.  Use the `tidy()` and `kable()` commands to produce a nice looking coefficients table.
+
+(Maybe look at https://rstudio-pubs-static.s3.amazonaws.com/58870_136d938b1ffd427ab5b30a98b663b127.html  for an idea)
+
+```{r}
+lm(cnt~season, bikes)
+```
+
+##### **(b)** How many total coefficients are there in the model?
+There are 4
+    
+    
+##### **(c)** How many coefficients are estimated for the `season` variable?
+  
+3 coefficients
+    
+    
+##### **(d)** Interpret the coefficients of `season` in the model.
+   
+The coefficients of season in the model represent the estimated effect of each season on the count of bikes, compared to the reference level (Winter).
+The coefficient for seasonSpring (2388) suggests that, on average, the count of bikes is expected to increase by 2388 when the season is Spring, compared to Winter.
+The coefficient for seasonSummer (3040) indicates that, on average, the count of bikes is expected to increase by 3040 when the season is Summer, compared to Winter.
+The coefficient for seasonFall (2124) suggests that, on average, the count of bikes is expected to increase by 2124 when the season is Fall, compared to Winter.
+
+<p> **Hint**: If you have not previously studied how to interpret qualitative variables in regressions, perhaps search on key terms 'lm', 'r', 'categorical predictor' 'interpreting'. </p>
+
+<hr>
+
+### Problem 2: Multiple linear regression
+
+> In this problem we'll practice fitting and interpreting the results of a multiple linear regression.
+
+##### **(a)** Fit a regression model with `cnt` as the response and the following variables as inputs: `temp`, `atemp`, `mnth`, `hum`, `windspeed`.  Produce a nice looking coefficients table.
+
+```{r}
+ bkmod<-lm(cnt~temp+atemp+mnth+hum+windspeed,data=bikes)
+summary(bkmod)
+```
+
+##### **(b)** Interpret the coefficients of `temp`, `mnth` and `hum` in the model.
+
+The coefficient for temp (45.387) suggests that, on average, for a one-unit increase in temperature, the count of bikes is expected to increase by 45.387, holding other variables constant. This means that higher temperatures are associated with increased ridership.
+The coefficient for mnth (95.040) suggests that, on average, for a one-unit increase in the month, the count of bikes is expected to increase by 95.040, holding other variables constant. This indicates that as the months progress, there is an increase in ridership.
+The coefficient for hum (-35.262) indicates that, on average, for a one-unit increase in humidity, the count of bikes is expected to decrease by 35.262, holding other variables constant. This implies that higher humidity levels are associated with decreased ridership.
+    
+##### **(c)** Which predictors are associated with increased ridership?  Which predictors are associated with decreased ridership?
+Increased ridership: temperature and month
+Decreased reidership: humidity
+    
+##### **(d)** Which predictors are statistically significant at the 0.05 level?
+   
+Month, humidity, and windspeed. This is indicated by the corresponding p-values being less than 0.05.
+
+
+### Problem 3:  Dealing with collinearity 
+
+> As you probably already know from your most recent regression class, *collinear* or *highly correlated* predictors can make interpreting regression coefficients problematic.  In this problem you will try to diagnose and address collinearity issues in the data.
+
+##### **(a)** Use the `pairs()` function on the set of variables used in **Problem 2** to check if any of the predictor variables are highly correlated with one another.  Your pairs plot should have scatterplots above the diagonal, and correlations below the diagonal.
+
+```{r}
+predictors <- bikes[, c("temp", "atemp", "mnth", "hum", "windspeed")]
+
+# Create the pairs plot
+pairs(predictors)
+```
+
+**Hint**: A complete example of how to use the `pairs()` command to construct such plots may be found here: [Pairs plot example](http://www.andrew.cmu.edu/user/achoulde/94842/lectures/lecture08/lecture08-94842.html#collinearity-and-pairs-plots)
+
+##### **(b)** Are any of the predictors highly correlated?  Are you surprised that these predictors are highly correlated, or can you think of a reason for why it makes sense that they should be correlated?
+
+Temp and atemp are correlated, I'm not surprised because both variables represent temperature, with temp being the actual temperature and atemp being the adjusted temperature. It is common for these two variables to be highly correlated since they are measuring similar aspects of temperature. Temp and month are also correlated. I'm not surprised, As the months progress, the temperature tends to change, so there might be a relationship between the month and temperature.
+
+
+
+##### **(c)** Refit your regression model, but this time **omit** the `temp` variable.  Display the coefficients table for this model.
+
+```{r}
+ bkmod<-lm(cnt~atemp+mnth+hum+windspeed,data=bikes)
+summary(bkmod)
+```
+
+##### **(d)** What is the coefficient of `atemp` in this new model?  Is it very different from the `atemp` coefficient estimated in part **(b)**?  Is it statistically significant?  Explain your findings.
+
+The coefficient of atemp in this model is statistically significant (p-value < 0.001). This suggests that there is strong evidence to support the claim that adjusted temperature (atemp) has a significant impact on the count of bikes, holding other variables constant.
+In summary, the coefficient of atemp in this new model is estimated to be 108.210, and it is statistically significant. atemp was also statisticalyl significant in part b.
+
+
+
+# Optional Material Below
+
+### Problem 4: Exploring non-linearities
+
+> **Hint**: For this problem, you will find it useful to know about the `jitter` feature in graphics.  [Begin by reviewing the code at this link](http://www.andrew.cmu.edu/user/achoulde/94842/misc/extra_tips.html#jittering-points), and be sure to use what you feel to be an appropriate amount of jitter in your plots for **(a)**, **(b)** and **(c)**.  You **should not** use jitter for parts **(d)** onward.  
+
+##### **(a)** Using `ggplot2` graphics, construct a scatterplot of `cnt` (bikeshare count) across `mnth` (month of the year).  Describe what you see.  Does a linear relationship appear to be a good way of modeling how bikeshare count varies with month?  
+
+```{r}
+ggplot(data = bikes, aes(x = mnth, y = cnt)) +
+  geom_point() +
+  labs(x = "Month", y = "Bikeshare Count") +
+  ggtitle("Scatterplot of Bikeshare Count by Month")
+```
+
+
+##### **(b)** Use `ggplot2`'s `stat_smooth()` overlays to try out *different degree polynomial fits* for modeling the relationship between `cnt` and `month`.  Display the lowest degree polynomial fit that appears to nicely capture the trends in the data.  Explain your choice.
+
+```{r}
+library("ggplot2")
+
+bikes_optional = bikes %>%
+  select(cnt, mnth)
+  ggplot(data=bikes, aes(x=mnth, y=cnt, color=as.factor(mnth))) + geom_jitter() + guides(color = FALSE) + stat_smooth(method = "lm", formula = cnt~ploy(mnth,1)) +
+    theme_bw()
+```
+
+
+
+##### **(c)** Use `ggplot2`'s `stat_smooth()` overlays to try out *different step functions* for modeling the relationship between `cnt` and `month`.  Display the model with the smallest number of "breaks" or "cuts" that nicely captures the trends in the data.  Explain your choice.  
+
+
+
+
+
+https://www.andrew.cmu.edu/user/achoulde/95791/lectures/code/week1.html
+
+to get some options.
+
+```{r}
+ggplot(data = bikes, aes(x = mnth, y = cnt)) +
+  geom_point() +
+  stat_smooth(method = "lm", formula = y ~ cut(x, breaks = 3), se = FALSE, color = "blue") +
+  labs(x = "Month", y = "Bikeshare Count") +
+  ggtitle("Step Function Model with 3 Breaks")
+```
+
+
+
+##### Which do you think better describes the relationship between `cnt` and `mnth`: Polynomials, or Step Functions?  Explain your answer.
+
+Polynomials are flexible and can capture both linear and non-linear relationships. They can fit curves of different shapes to the data. If the relationship between cnt and mnth exhibits a smooth, curvilinear pattern, polynomials may be a better choice. They can capture gradual changes and inflections in the relationship. However, it is better to try both and see which fits the best.
+
+
+
+##### **(d)**  Repeat parts **(a)** and **(b)** to determine appropriate degree polynomials for modeling the relationship between `cnt` and the other inputs: `atemp`, `hum` and `windspeed`.  Summarize your choices.  (Note: your polynomials can have different degrees for different inputs.)
+
+
+```{r}
+# Scatterplot and Visual Inspection
+ggplot(data = bikes, aes(x = atemp, y = cnt)) +
+  geom_point() +
+  labs(x = "Temperature", y = "Bikeshare Count") +
+  ggtitle("Scatterplot of Bikeshare Count by Temperature")
+
+ggplot(data = bikes, aes(x = hum, y = cnt)) +
+  geom_point() +
+  labs(x = "Humidity", y = "Bikeshare Count") +
+  ggtitle("Scatterplot of Bikeshare Count by Humidity")
+
+ggplot(data = bikes, aes(x = windspeed, y = cnt)) +
+  geom_point() +
+  labs(x = "Windspeed", y = "Bikeshare Count") +
+  ggtitle("Scatterplot of Bikeshare Count by Windspeed")
+
+# Polynomial Model Fitting
+degree <- 2  # Replace with the desired degree of the polynomial
+
+# Example for atemp variable
+atemp_model <- lm(cnt ~ poly(atemp, degree), data = bikes)
+summary(atemp_model)
+
+# Example for hum variable
+hum_model <- lm(cnt ~ poly(hum, degree), data = bikes)
+summary(hum_model)
+
+# Example for windspeed variable
+windspeed_model <- lm(cnt ~ poly(windspeed, degree), data = bikes)
+summary(windspeed_model)
+```
+
+Replace degree with the desired degree of the polynomial (e.g., 1, 2, 3, etc.) in the poly() function for each variable (atemp, hum, and windspeed). This will allow you to fit polynomial models of different degrees and evaluate their performance.
+
+##### **(e)** Use your answers to parts **(b)** and **(d)** to fit a polynomial regression model that regresses `cnt` on polynomials in the input variables: `atemp`, `mnth`, `hum`, and `windspeed`. How does the R-squared of this model compare to the R-squared of the model you fit in Problem 3(d)?  
+
+```{r}
+degree_atemp <- 2  # Chosen degree for atemp variable
+degree_mnth <- 1   # Chosen degree for mnth variable
+degree_hum <- 3    # Chosen degree for hum variable
+degree_windspeed <- 2  # Chosen degree for windspeed variable
+
+# Fit polynomial models for each input variable
+atemp_model <- lm(cnt ~ poly(atemp, degree_atemp), data = bikes)
+mnth_model <- lm(cnt ~ poly(mnth, degree_mnth), data = bikes)
+hum_model <- lm(cnt ~ poly(hum, degree_hum), data = bikes)
+windspeed_model <- lm(cnt ~ poly(windspeed, degree_windspeed), data = bikes)
+
+# Combine polynomial terms into a single dataset
+polynomial_data <- data.frame(
+  atemp_poly = poly(bikes$atemp, degree_atemp),
+  mnth_poly = poly(bikes$mnth, degree_mnth),
+  hum_poly = poly(bikes$hum, degree_hum),
+  windspeed_poly = poly(bikes$windspeed, degree_windspeed),
+  cnt = bikes$cnt
+)
+
+# Fit multiple polynomial regression model
+polynomial_regression_model <- lm(cnt ~ ., data = polynomial_data)
+
+# Summary of the polynomial regression model
+summary(polynomial_regression_model)
+```
+
+In this code, bikes represents the dataset containing the variables cnt, atemp, mnth, hum, and windspeed. Replace it with the appropriate dataset name in your code.
+First, specify the chosen degree polynomials for each input variable (degree_atemp, degree_mnth, degree_hum, and degree_windspeed). Then, fit polynomial models for each input variable using the poly() function.
+Next, combine the polynomial terms of the input variables into a single dataset (polynomial_data), including the cnt variable.
+Finally, fit a multiple polynomial regression model using the combined dataset and the lm() function. The . in the formula indicates that all variables except cnt should be included in the model.
+You can examine the summary of the polynomial regression model using summary(polynomial_regression_model) to assess the model's performance and interpret the coefficients.
+
+
+##### **(f)** What is the total number of parameters in the model you fit in part **(e)**?  How does this compare to the number of parameters in the model fit in Problem 3(d)?
+
+The number of parameters is 14. There are more parameters here
+
+

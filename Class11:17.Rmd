@@ -1,0 +1,176 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This notebook supports as asynchronous lecture meant to introduce you to some basics of spatial data. The lecture will be provided.
+
+Key topics:
+-Using here package
+-Using the /data-raw/ directory
+-Reminder on joins (focus: left join)
+Our spatial Data
+  -Neighborhoods
+  -Joining with non-spatial data
+  -Census data
+  Joining with spatial data
+-Ignore html in git
+
+```{r}
+library(knitr)
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(here)
+library(sf)
+library(tmap)
+library(tidycensus)
+library(dplyr)
+install.packages("gbfs")
+library(gbfs)
+```
+
+
+```{r}
+neigh=st_read(here("data_raw",
+                    "DC_Health_planning_Neighborhoods.geojson")) %>%clean_names()
+
+class(neigh)
+
+```
+```{r}
+neigh$geometry[1]
+neigh$geometry[1]$POLYGON
+view(neigh)
+plot(neigh)
+```
+
+```{r}
+df1=tibble(fruit=c("apple", "banana", "cherry"), cost = c(1.5, 1.2,2.25))
+df2=tibble(fruit=c("apple", "apple", "cherry", "lemon"),
+           dessert=c("pie", "cobbler", "cobbler", "cheesecake"),
+           cal=c(400,430,500,550))
+df1
+```
+
+```{r}
+df2
+```
+
+```{r}
+left_join(df1,df2,by="fruit")
+```
+
+##Injesting joining spatial and non-spatial data
+
+```{r message=FALSE, warning=FALSE}
+df_c=read_csv(here("data_raw",
+              "DC_COVID-19_Total_Positive_Cases_by_Neighborhood.csv")) %>%
+  clean_names()
+
+```
+
+
+```{r}
+df_cases=df_c %>%
+  filter(as_date(date_reported) =="2021-11-17") %>%
+  separate(neighborhood,into=c("code", "name"),sep =":") %>%
+  mutate(code=case_when(code=="N35" ~"NO",
+                        TRUE ~ code)) 
+  
+
+```
+
+
+
+```{r}
+neigh2=left_join(neigh,df_cases,by=c("code"))
+
+tmap_mode("view")
+
+tm_shape(neigh2) +tm_polygons("total_positives",alpha=.5)
+```
+
+
+
+```{r eval=FALSE, include=FALSE}
+census_api_key("6f39f12de0ff3a29877db82780befcd77e0d5a2a")
+```
+
+```{r}
+v20 = load_variables(2018, "acs5")
+view(v20 )
+```
+
+```{r}
+df_cencus=get_acs(geography = "tract",
+                  variables=c("median_inc"="B06011_001",
+                            "pop"="B01001_001",
+                            "pop_black"="B02009_001"),
+                  state="DC",geometry=TRUE,year=2021) 
+                            
+```
+
+```{r}
+class(df_cencus)
+plot(df_cencus)
+view(df_cencus)
+```
+
+```{r}
+df_cens=df_cencus %>%
+  
+  pivot_wider(names_from = "variable",
+              values_from = "estimate")
+
+tm_shape(df_cens) +tm_polygons("median_inc",alpha=.5)
+view(df_cens)
+```
+
+```{r}
+tm_shape(neigh2)+tm_borders(col="blue", lwd=5, alpha=.2)+ tm_shape(df_cens)+tm_borders(col="red", lwd=1, alpha=.3)
+```
+
+```{r}
+df_j=st_join(df_cens,neigh2)
+```
+```{r}
+df_cens_adj=df_cens %>% st_transform(4326)
+```
+
+```{r}
+df_j=st_join(df_cens_adj,neigh2,largest=TRUE)
+```
+
+```{r}
+df_j_rev=st_join(neigh2,df_cens_adj,largest=TRUE)
+view(df_j_rev)
+```
+
+
+```{r}
+df1=df_j %>% select(median_inc, pop, pop_black,code) %>%
+  group_by(code) %>%
+  summarize(pop_n=sum(pop),
+            pop_black_n=sum(pop_black),
+            adj_median_income=sum(pop*median_inc)/pop_n)
+plot(df1)
+```
+
+```{r}
+
+df2=left_join(neigh2,df1 %>% st_set_geometry(NULL))
+```
+
+```{r}
+df2=df2 %>% mutate(black_perc=pop_black_n/pop_n, covid_rate=total_positives/pop_n)
+tm_shape(df2) +tm_polygons(c("adj_median_income","covid_rate","black_perc"))
+view(df2)
+```
+
+```{r}
+df2 %>% filter(code!="NO") %>%
+tm_shape()+tm_polygons(c("adj_median_income","covid_rate","black_perc"),alpha=.4)
+```
+
+

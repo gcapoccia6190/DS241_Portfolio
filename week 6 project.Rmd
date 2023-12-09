@@ -1,0 +1,55 @@
+---
+title: "Week 6 Letcure"
+output: html_notebook
+Author: Morgan and Mateo
+---
+
+
+```{r}
+library(nycflights13)
+library(tidyverse)
+library(janitor)
+library(here)
+```
+
+# loads the data 
+```{r}
+thisfile=here("CU_ACAD_DEPT_WHEN_OFF_ENRL.csv")
+
+df1=read_csv(thisfile) %>% clean_names()
+```
+
+# learn how to use the skim function
+```{r}
+skimr::skim(df1)
+```
+
+# filters the data. Want to keep the rows that apply to MA131 and MA132
+```{r}
+df_calc = df1|>
+  select(-acad_org,-title,-current_status,-course_id) |>
+  filter(subject=="MA", 
+         catalog %in% c(120,125,131,132),
+         component == "LEC", term_8 == "Fall 2023")
+
+
+tot_enrl = df_calc[6]
+
+```
+
+
+
+# this sums up all the students who is eligible to enroll in MA132 in Spring 2024
+```{r}
+
+y = sum(tot_enrl)
+
+```
+
+
+# estimates the enrollment of spring 2024. Sometimes students don’t move on from calc 1 or equivalent classes so we estimated that 95% of the students do move on to calc 2.
+```{r}
+SP24 = 0.95 * y
+round(SP24)
+```
+
