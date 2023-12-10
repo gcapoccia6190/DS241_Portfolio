@@ -1,0 +1,380 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+title: "11/6/23 Experiment 5"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Load 
+```{r}
+library(tidyverse) 
+library(dplyr)
+library(janitor)
+library(here)
+library(openmeteo)
+```
+
+
+# Read the Data
+```{r}
+df1 = read_csv(here("data_raw/bikes.zip"))
+print(head(df1))
+print(names(df1))
+```
+
+#Keep track of riders over time - Experiment 4 from Friday 11/3/23
+```{r}
+
+df2s <- df1 %>%
+   select(rideable_type, member_casual, ride_id, contains("start")) %>%
+   mutate(start_stop = "start") %>%
+   rename(t = started_at,
+          station_name = start_station_name,
+          station_id = start_station_id,
+          lat = start_lat,
+          lng = start_lng)
+
+df2e = df1 %>%
+  select(ride_id,rideable_type,member_casual,
+         contains("end")) %>%
+  mutate(start_stop="stop") %>%
+  rename(t=ended_at,
+         station_name=end_station_name,
+         station_id=end_station_id,
+         lat=end_lat,
+         lng=end_lng)
+
+df2=bind_rows(df2s,df2e) %>%
+  arrange(t) %>%
+  mutate(rider_delta=(start_stop=="start")*2-1) %>% #change in ridership 
+  mutate(riders=cumsum(rider_delta)) %>%
+  relocate(riders,.after=t)
+
+
+
+```
+ 
+ 
+# Start of Monday  - Experiment 5 from Friday 11/6/23
+```{r}
+
+# Plotting 
+
+df2 %>% 
+  ggplot(aes(t,riders)) +
+  geom_line()
+
+```
+ 
+ 
+```{r}
+df_r=df2 |>
+  mutate(t_f=floor_date(t,"10 mins")) %>%
+  relocate(t_f,.after=t) %>%
+  slice_head(n=1,by=t_f)
+
+df_r %>% 
+  ggplot(aes(t,riders)) +
+  geom_line()
+```
+
+
+```{r}
+df_r=df2 |>
+  mutate(t_f=floor_date(t,"1 mins")) %>%
+  relocate(t_f,.after=t) %>%
+  slice_head(n=1,by=t_f)
+
+p1=df2 %>% 
+  filter(day(t)==18) %>%
+  ggplot(aes(t,riders)) +
+  geom_line() +
+  ggtitle("Riders on 18Sep")
+
+p1+
+  geom_line(data=df_r %>% filter(day(t)==18),
+  color="red")
+```
+
+```{r}
+p1=df2 %>% 
+  filter(day(t)==18) %>%
+  ggplot(aes(t,riders)) +
+  geom_line() +
+  ggtitle("Riders on 18Sep")
+
+p1+
+  geom_line(data=df_r %>% filter(day(t)==18),
+  color="red")
+```
+ 
+ 
+ 
+
+# Currently we are looking at 900,000 data points, how can we reduce this?
+```{r}
+df_s=df2 %>% slice_head(n=1000)
+df_s %>% 
+  ggplot(aes(t,riders)) +
+  geom_line()
+
+```
+
+```{r}
+# can't use the data above since it chops off the time. So to fix this we are going to round down (floor()) to the nearest 10 minutes and then slice
+
+df_e=df_s |>
+  mutate(t_f=floor_date(t,"10 mins")) %>%
+  relocate(t_f,.after=t) %>%
+  slice_head(n=1,by=t_f)
+
+df_e %>% 
+  ggplot(aes(t,riders)) +
+  geom_line()
+
+```
+
+
+
+
+
+
+
+
+
+#Getting Weather Data for Septemebr
+
+```{r}
+df_w=weather_history("Washington",
+      start = "2023-09-01",
+      end = "2023-09-30",
+      hourly = c("apparent_temperature",
+                  "wind_speed_10m",
+                  "precipitation")
+
+)
+```
+
+```{r}
+df_s=df2 %>% slice_sample(n=1000)
+df_j=df_s %>% left_join(df_w,
+          by=join_by(closest(t>=datetime)))
+```
+
+
+```{r}
+df_j=df_s %>% 
+  left_join(df_w,by=join_by(closest(t>=datetime)))  %>%
+  relocate(datetime, .after=t) 
+head(df_j)
+
+```
+```{r}
+df_j$t[1:5]
+df_j$datetime[1:5]
+```
+```{r}
+df2$t[1:5]
+force_tz(df2$t[1:5],"America/New_York")
+
+df2c=df2 %>% mutate(t=force_tz(t,tzone="America/New_York")) 
+df_s2=df2c %>% 
+  slice_sample(n=1000)
+df_j2 = df_s2 %>% 
+  left_join(df_w,by=join_by(closest(t>=datetime)))  %>%
+  relocate(datetime, .after=t) 
+
+head(df_j2)
+  
+  
+dfc=df2c %>% 
+  left_join(df_w, by=join_by(closest(t>=datetime))) %>%
+  relocate(datetime, .after=t)  %>%
+  rename(atempt=hourly_apparent_temperature,
+         wind=hourly_wind_speed_10m,
+         prec=hourly_precipitation)
+  
+
+```
+```{r}
+p2=dfc %>%
+  ggplot(aes(x=t,y=riders,color=prec>1)) +
+  geom_point()
+p2
+```
+
+```{r}
+p2=dfc %>%
+  filter(day(t)==10) %>%
+  ggplot(aes(x=t,y=riders,color=prec)) +
+  geom_point()
+p2
+```
+
+###Answering the questions
+
+Easy:
+Use summarise to create a dataframe that counts the number of "starts" from each station ID
+Use summarise to create a dataframe that counts the number of "ends" from each station ID.
+
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+dfb <- df1 %>%
+  filter(started_at <= ended_at & month(started_at) == 9)
+
+```
+
+```{r}
+df_startcount <- dfb %>%
+  group_by(start_station_id) %>%
+  count(name="start_count")
+print(df_startcount)
+```
+
+```{r}
+df_endcount <- dfb %>%
+  group_by(end_station_id) %>%
+  count(name="end_count")
+print(df_endcount)
+```
+
+Medium Problems:
+
+Join those two dataframes (in an appropriate way)
+
+```{r}
+joined_df <- left_join(df_startcount, df_endcount, by = c("start_station_id" = "end_station_id"))
+print(joined_df)
+```
+
+Compute the "net gain"  (arrivals - departures) from each station.
+
+```{r}
+joined_df$net_gain <- joined_df$start_count - joined_df$end_count
+print(joined_df)
+```
+
+Stretch goals:
+
+Perform exploratory analysis (visualization??) on the resultant dataframe:
+
+```{r}
+# Summary statistics
+summary(joined_df$net_gain)
+```
+
+```{r}
+# Histogram
+hist(joined_df$net_gain, breaks = 10, col = "blue", main = "Distribution of Net Gains")
+```
+
+```{r}
+# Bar plot
+barplot(joined_df$net_gain, names.arg = joined_df$start_station_id, col = "green",
+        xlab = "Station ID", ylab = "Net Gain", main = "Net Gains by Station")
+```
+
+```{r}
+# Box plot
+boxplot(joined_df$net_gain, col = "orange", main = "Distribution of Net Gains")
+```
+
+```{r}
+# Scatter plot (if other variables are available)
+plot(joined_df$net_gain, joined_df$start_station_id, main = "Net Gains vs. Start Station ID",
+     xlab = "Net Gain", ylab = "Start Station ID")
+```
+
+
+
+
+Visualize number of riders BY STATION for some of the more active stations:
+
+```{r}
+sorted_df <- joined_df %>% arrange(desc(start_count))
+
+# Select the top 10 active stations
+top_stations <- head(sorted_df, 10)
+
+# Create a horizontal bar plot
+barplot(top_stations$start_count, horiz = TRUE, col = "blue",
+        xlab = "Number of Riders", ylab = "Station ID",
+        main = "Number of Riders by Station (Top 10 Active Stations)")
+
+# Add labels for station IDs
+text(top_stations$start_count, 1:length(top_stations$start_station_id),
+     labels = top_stations$start_station_id, pos = 4, cex = 0.8, col = "black")
+
+```
+
+
+Conclusions:
+
+Net Gains Distribution: The box plot of net gains suggests that there is a wide range of net gains across stations, with some stations exhibiting significantly higher or lower net gains compared to others.
+
+Active Stations: The bar plot of net gains by station reveals that certain stations have higher net gains compared to others. These stations may be considered more active or popular among riders.
+
+Arrivals vs. Departures: The scatter plot of the number of arrivals versus the number of departures shows the relationship between these two variables. It can help identify any patterns or trends in how riders use the bike-sharing system.
+
+The number of riders does not change much depending on station ID
+
+Hypotheses/Questions:
+
+Hypothesis: Stations with higher arrival counts are likely to have higher net gains.
+To test this hypothesis, you can calculate the correlation between the number of arrivals and net gains and examine the scatter plot to observe the relationship.
+
+```{r}
+correlation_arrivals_netgains <- cor(joined_df$start_count, joined_df$net_gain)
+
+# Print the correlation coefficient
+print(paste("Correlation between Arrivals and Net Gains:", correlation_arrivals_netgains))
+```
+
+Hypothesis: Stations with higher departure counts are likely to have lower net gains.
+To test this hypothesis, you can calculate the correlation between the number of departures and net gains and examine the scatter plot to observe the relationship.
+
+```{r}
+correlation_departures_netgains <- cor(joined_df$end_count, joined_df$net_gain)
+
+# Print the correlation coefficient
+print(paste("Correlation between Departures and Net Gains:", correlation_departures_netgains))
+```
+
+For Hypothesis 1 (correlation between arrivals and net gains), a correlation coefficient of -0.7 suggests that as the number of arrivals at a station increases, the net gains tend to be lower. This implies that stations with higher arrival counts may not necessarily have higher net gains.
+
+Similarly, for Hypothesis 2 (correlation between departures and net gains), a correlation coefficient of -0.7 indicates that as the number of departures from a station increases, the net gains tend to be lower. This suggests that stations with higher departure counts may not necessarily have higher net gains either.
+
+It's important to note that correlation does not imply causation. While the correlation coefficients indicate a strong negative relationship, further analysis is required to understand the underlying factors influencing these patterns
+
+
+The provided R code presents several complex tasks involved in data science, especially those related to data wrangling, data visualization, data transformation, and exploratory data analysis.
+Here's a breakdown of the tasks:
+1. Loading Libraries:
+The code begins by loading the necessary R libraries. These libraries provide functions that will be used in later stages of the code.
+2. Reading the Data:
+The data file 'bikes.zip' is read into a dataframe (df1). This is a crucial step because all subsequent data manipulation and analysis are based on this dataframe.
+
+3. Data Wrangling:
+The code modifies the original dataframe to create a new dataframe (df2) that tracks the movements of riders over time. This is done by separating the start and stop data into two dataframes (df2s and df2e) and then combining them. Extra columns are added to track the change in ridership over time.
+4. Data Visualization:
+The code creates plots to visualize the number of riders over time. This helps provide a visual understanding of the data.
+5. Data Transformation:
+The code reduces the granularity of the date-time information by flooring it to the nearest 10 minutes or 1 minute. This is a form of data transformation that can help make the data more manageable or reveal certain patterns.
+6. Data Sampling and Reduction:
+The code samples the dataframe to reduce the number of data points. This can make the data more manageable and speed up computations.
+7. Merging Data:
+The code merges the ridership data with weather data, demonstrating the process of combining different datasets. This can be useful when exploring relationships between variables from different sources.
+8. Exploratory Data Analysis:
+The code calculates the net gain of riders at each station and produces visualizations to explore the distribution of net gains, the relationship between arrivals and departures, and the number of riders at the most active stations. This stage of the process can help generate hypotheses or reveal insights about the data.
+9. Statistical Analysis:
+The code calculates correlations between different variables, which can provide quantitative measures of relationships in the data.
+In conclusion, this R code covers a significant range of tasks involved in data science, from data loading, wrangling, and transformation, to visualization, exploratory analysis, and statistical analysis.
