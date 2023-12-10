@@ -1,0 +1,71 @@
+---
+title: "DS241 Final Proeject - DC Bikeshare "
+output: html_notebook
+author: "Alexis Alexander, Gianna Capoccia, Morgan Eaton, and Mateo Sarabia"
+date: "09 December 2023"
+---
+
+## Background Information
+
+The purpose of our analysis involves exploring potential methods of increasing ridership for the DC Captial Bikeshare program. This motivation in focusing on ridership aligns with the DC Bikeshare's main mission in transforming the Washingtion Metropolitan Area and residing communities by providing an affordable bicycle transit system. The goals outlined in this targeted reformation includes decreasing traffic congestion, promoting health and wellness, decreasing air pollution, and expanding transportation options. The DC Biekshare program is owned by several jurisdictions however, is mainly managed by the DC local government.  
+
+More information pertaining to the bikeshare program can be found by following this link: https://capitalbikeshare.com/
+
+## Business Understanding 
+
+Following the methods outline in the CRISP-DM Methodology, we initially focused on understanding the various business aspects to our problem before analyzing any data. We determine our business objectives by researching the background of the DC Bikeshare program, as seen above. Next, we determine our data mining goals and identified a overall question we aim to solve for our analysis.
+
+This question pertains to the following: How do we make it safer for people to ride bikes as a means of increasing ridership?
+
+
+## Installing Packages 
+
+Below are the packages should be installed:
+
+```{r}
+install.packages("tidyverse")
+install.packages("janitor")
+install.packages("lubridate")
+install.packages("here")
+install.packages("mapview")
+install.packages("gbfs")
+install.packages("sf")
+install.packages("tmap")
+install.packages("tidycensus")
+```
+
+Baseline packages for our analysis: 
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(lubridate) # because we will probably see some dates
+library(here) # more easily access files in your project
+library(mapview)
+library(gbfs)
+library(sf) # working with simple features - geospatial
+library(tmap)
+library(tidycensus)
+```
+
+## Accessing and Loading the Databases 
+
+We are initially looking at the following three data sets:
+
+1. The DC Bikeshare System Data for September 2023: https://capitalbikeshare.com/system-data
+2. The DC Protected vs Unprotected Bikelane Dataset: https://opendata.dc.gov/datasets/bicycle-lanes/explore
+3. The DC Crimes and Accidents Dataset: https://opendata.dc.gov/datasets/crashes-in-dc/explore
+
+```{r}
+bikes <- read_csv(here("data_raw","202309-capitalbikeshare-tripdata.csv"))%>% clean_names() # bike share data
+```
+```{r}
+lanes <- read_csv(here("data_raw", "Bicycle_Lanes-2.csv")) %>% clean_names() # bike lane data
+crashes <- read_csv(here("data_raw", "Crashes_in_DC-2.csv")) %>% clean_names() # bike accident data
+```
+
+
+
+
+
+
