@@ -1,0 +1,430 @@
+---
+title: "STAT385 Homework 8"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+
+
+```{r}
+# Load required libraries
+library(ggplot2)
+library(MCMCpack)
+library(rstan)
+library(rstanarm)
+library(dplyr)
+library(bayesrules)
+library(tidyverse)
+```
+
+
+
+
+Problem 1:
+
+The penguins_bayes dataset in the bayesrules package includes data on 344 penguins. In the next exercises, you will use this data to model the length of penguin flippers in mm ( Y) by the length of their bills in mm ( X). We have a general sense that the average penguin has flippers that are somewhere between 150mm and 250mm long. Beyond that, we don’t have a strong understanding of the relationship between flipper and bill length, and thus will otherwise utilize weakly informative priors.
+
+Simulate the Normal regression prior model of flipper_length_mm by bill_length_mm using 4 chains for 10000 iterations each. HINT: You can use the same stan_glm() syntax that you would use to simulate the posterior, but include prior_PD = TRUE.
+```{r}
+# Remove NA values
+penguins_bayes <- na.omit(penguins_bayes)
+prior_model <- stan_glm(flipper_length_mm ~ bill_length_mm, data = penguins_bayes, 
+                        family = gaussian(), 
+                        prior_intercept = normal(200, 25), 
+                        prior = normal(0, 10),
+                        prior_aux = cauchy(0, 5),
+                        prior_PD = TRUE, 
+                        chains = 4, iter = 10000)
+prior_summary(prior_model)
+```
+
+
+Plot 100 prior plausible model lines ( β0+β1X) and 4 datasets simulated under the priors.
+```{r}
+prior_preds <- posterior_linpred(prior_model, draws = 100)
+
+# Combine the predictions with the bill lengths
+prior_df <- data.frame(bill_length_mm = penguins_bayes$bill_length_mm, 
+                       t(prior_preds))
+
+# Reshape to long format
+prior_df_long <- gather(prior_df, model, flipper_length_mm, -bill_length_mm)
+
+# Plot
+ggplot(prior_df_long, aes(x = bill_length_mm, y = flipper_length_mm)) +
+  geom_line(aes(group = model), colour = "lightgray") +
+  geom_point(data = penguins_bayes, aes(x = bill_length_mm, y = flipper_length_mm)) +
+  labs(x = "Bill Length (mm)", y = "Flipper Length (mm)", 
+       title = "Prior Plausible Models and Observed Data") +
+  theme_minimal()
+
+```
+
+
+Summarize your weakly informative prior understanding of the relationship between flipper and bill length.
+
+ The variability in these lines also adequately reflects our overall uncertainty about this association. 
+
+
+
+Problem 2:
+
+With the priors in place, let’s examine the data.
+
+Plot and discuss the observed relationship between flipper_length_mm and bill_length_mm among the 344 sampled penguins.
+```{r}
+# Plot the relationship between flipper_length_mm and bill_length_mm
+plot(penguins_bayes$bill_length_mm, penguins_bayes$flipper_length_mm, pch = 16, col = "black",
+     xlab = "Bill Length (mm)", ylab = "Flipper Length (mm)")
+```
+
+```{r}
+# Calculate the correlation coefficient, handling missing values
+correlation <- cor(penguins_bayes$bill_length_mm, penguins_bayes$flipper_length_mm, use = "complete.obs")
+
+# Print the correlation coefficient
+print(correlation)
+```
+
+Does simple Normal regression seem to be a reasonable approach to modeling this relationship? Explain.
+
+Given that the plot shows linearity and that the correlation coefficient is relatively close to 1, a Normal regression model is a reasonable approach.
+
+Problem 3:
+
+Let’s examine our posterior understanding of the relationship between flipper and bill length, a balance between our prior understanding and the data.
+
+Use stan_glm() to simulate the Normal regression posterior model. HINT: You can either do this from scratch or update() your prior simulation from Exercise 9.16 using prior_PD = FALSE.
+```{r}
+ formula <- flipper_length_mm ~ bill_length_mm # Simulate the Normal regression posterior model 
+
+
+# Specify the prior distributions for the intercept, coefficient, and auxiliary parameter (sigma)
+prior_intercept <- normal(location = 201, scale = 35)
+prior <- normal(location = 0, scale = 6.4)
+prior_auxiliary <- exponential(rate = 0.071)
+
+# Fit the posterior model with specified priors
+posterior_model <- stan_glm(flipper_length_mm ~ bill_length_mm, data = penguins_bayes, family = gaussian(), prior_intercept = prior_intercept, prior = prior, prior_aux = prior_auxiliary)
+
+# Extract the posterior samples
+posterior_samples <- as.data.frame(posterior_model)
+
+```
+```{r}
+summary(posterior_model)
+```
+
+Plot 100 posterior model lines for the relationship between flipper and bill length.
+```{r}
+library(ggplot2)
+library(rstan)
+library(rstanarm)
+# Plot the scatterplot
+plot(penguins_bayes$bill_length_mm, penguins_bayes$flipper_length_mm, xlab = "Bill Length (mm)", ylab = "Flipper Length (mm)")
+
+# Select a subset of posterior samples (e.g., every 10th sample)
+selected_samples <- posterior_samples[seq(1, nrow(posterior_samples), 100), ]
+
+# Loop through the selected samples
+for (i in 1:nrow(selected_samples)) {
+  # Simulate the posterior model line
+  simulated_line <- selected_samples$`(Intercept)`[i] + selected_samples$bill_length_mm[i] * penguins_bayes$bill_length_mm
+  
+  # Plot the line
+  lines(penguins_bayes$bill_length_mm, simulated_line, col = "gray", lwd = 0.5)
+}
+```
+
+The lines represent different possible model predictions based on the posterior samples of the model parameters. If the lines are close together, it suggests that there is significant uncertainty or variability in the estimated parameters. This could be due to a lack of strong evidence in the data or inherent variability in the relationship between the variables.
+
+Provide a tidy() summary of your posterior model, including 90% credible intervals.
+```{r}
+library(broom.mixed) # Tidy summary of the posterior model 
+summary_output <- tidy(posterior_model, conf.int = TRUE, conf.level = 0.9) 
+print(summary_output)
+
+```
+
+Interpret the 90% posterior credible interval for the bill_length_mm coefficient,  
+β1.
+The credible interval represents the range of plausible values for the coefficient β1. In this case, we can be 90% confident that the true value of the bill_length_mm coefficient falls within the interval from approximately 1.52064 to 1.856442.
+
+Do we have ample posterior evidence that penguins with longer bills tend to have longer flippers? Explain.
+
+Based on these results, we can conclude that there is ample posterior evidence to suggest that penguins with longer bills tend to have longer flippers. The positive coefficient estimate and the fact that the credible interval does not include zero further support this conclusion.
+
+
+
+Problem 4:
+A researcher comes across Pablo the penguin. They’re able to ascertain that Pablo’s bill is 51mm long but the penguin waddles off before they get to measure the flipper.
+
+
+Without using the posterior_predict() shortcut function, simulate the posterior model for the typical flipper length among penguins with 51mm bills as well as the posterior predictive model for Pablo’s flipper length.
+```{r}
+# Load required libraries
+library(tidyverse)
+library(rstan)
+
+# Specify the observed bill length
+observed_bill_length <- 51
+
+# Specify the prior distribution parameters for flipper length
+prior_mean <- 200
+prior_sd <- 10
+
+# Update the prior distribution with the observed data
+observed_flipper_length <- penguins_bayes$flipper_length_mm
+observed_flipper_length <- na.omit(observed_flipper_length)
+posterior_mean <- (prior_mean * (prior_sd^2) + sum(observed_flipper_length)) / (prior_sd^2 + length(observed_flipper_length))
+posterior_sd <- sqrt(1 / (1/prior_sd^2 + length(observed_flipper_length)/prior_sd^2))
+
+# Simulate the posterior model for the typical flipper length with a 51 mm bill
+simulated_typical_flipper_length <- rnorm(1000, posterior_mean, posterior_sd)
+
+# Simulate the posterior predictive model for Pablo's flipper length
+pablo_bill_length <- 51
+pablo_posterior_mean <- (prior_mean * (prior_sd^2) + observed_flipper_length) / (prior_sd^2 + 1)
+pablo_posterior_sd <- sqrt(1 / (1/prior_sd^2 + 1))
+simulated_pablo_flipper_length <- rnorm(1000, pablo_posterior_mean, pablo_posterior_sd)
+
+# Summary statistics for the simulated flipper lengths
+class(simulated_typical_flipper_length)
+summary(simulated_typical_flipper_length)
+```
+
+```{r}
+summary(simulated_pablo_flipper_length)
+```
+
+Construct, discuss, and compare density plot visualizations for the two separate posterior models in part a.
+```{r}
+# Density plot for the typical flipper length
+simulated_typical_flipper_length <- na.omit(simulated_typical_flipper_length)
+ggplot() +
+  geom_density(aes(simulated_typical_flipper_length), fill = "blue", alpha = 0.5) +
+  labs(title = "Posterior Model for Typical Flipper Length",
+       x = "Flipper Length (mm)",
+       y = "Density")
+
+
+# Density plot for the posterior predictive model for Pablo's flipper length
+ggplot() +
+  geom_density(aes(simulated_pablo_flipper_length), fill = "green", alpha = 0.5) +
+  labs(title = "Posterior Predictive Model for Pablo's Flipper Length",
+       x = "Flipper Length (mm)",
+       y = "Density")
+
+# Comparing the two density plots
+ggplot() +
+  geom_density(aes(simulated_typical_flipper_length), fill = "blue", alpha = 0.5) +
+  geom_density(aes(simulated_pablo_flipper_length), fill = "green", alpha = 0.5) +
+  labs(title = "Comparison of Density Plots",
+       x = "Flipper Length (mm)",
+       y = "Density") +
+  scale_fill_manual(values = c("blue", "green"),
+                    labels = c("Typical Flipper Length", "Pablo's Flipper Length"))
+```
+
+The density plot for typical flipper length has a higher mean and a higher density at the mean. However the density for Pablo's flipper length has a much wider range of values. Both follow a normal distribution.
+
+Calculate and interpret an 80% posterior prediction interval for Pablo’s flipper length.
+```{r}
+# Calculate the 10th and 90th quantiles
+quantiles <- quantile(simulated_pablo_flipper_length, probs = c(0.1, 0.9))
+
+# Calculate the 80% posterior prediction interval
+prediction_interval <- quantiles[2] - quantiles[1]
+
+# Interpretation of the 80% posterior prediction interval
+interpretation <- "We are 80% confident that Pablo's flipper length falls within the range of ["
+interpretation <- paste0(interpretation, round(quantiles[1], 2), "mm, ", round(quantiles[2], 2), "mm].")
+
+interpretation
+```
+
+Would the 80% credible interval for the typical flipper length among all penguins with 51mm bills be wider or narrower? Explain.
+
+The 80% credible interval for the typical flipper length among all penguins with a 51 mm bill would be narrower compared to the 80%
+ posterior prediction interval for Pablo's flipper length. This is because the posterior prediction interval takes into account the uncertainty in predicting an individual's flipper length based on the observed bill length, while the credible interval for the typical flipper length considers the uncertainty in estimating the population parameter.
+ 
+Use posterior_predict() to confirm your results
+```{r}
+# Load required libraries
+library(brms)
+
+# Fit the Bayesian regression model
+model_fit <- brm(flipper_length_mm ~ bill_length_mm,
+                 data = penguins_bayes,
+                 family = gaussian())
+
+# Generate posterior predictions using posterior_predict()
+post_pred <- posterior_predict(model_fit)
+
+
+# Density plot from posterior predictive distribution
+density_post_pred <- density(post_pred)
+plot(density_post_pred, main = "Density Plot (Posterior Predictive)")
+
+```
+
+
+Problem 5: 
+ Let’s begin our analysis of penguin body_mass_g by exploring its relationship with flipper_length_mm and species.
+
+Plot and summarize the observed relationships among these three variables.
+```{r}
+# Create a scatter plot of body_mass_g against flipper_length_mm
+ggplot(penguins_bayes, aes(x = flipper_length_mm, y = body_mass_g, color = species)) +
+  geom_point() +
+  labs(x = "Flipper Length (mm)", y = "Body Mass (g)", title = "Penguin Body Mass vs Flipper Length") +
+  theme_minimal()
+
+# Summarize the relationships among the variables
+summary(penguins_bayes[c("body_mass_g", "flipper_length_mm", "species")])
+```
+
+
+Use stan_glm() to simulate a posterior Normal regression model of body_mass_g by flipper_length_mm and species, without an interaction term.
+```{r}
+
+model <- stan_glm(body_mass_g ~ flipper_length_mm + species, data = penguins_bayes, chains = 4, iter = 10000) 
+
+```
+
+Create and interpret both visual and numerical diagnostics of your MCMC simulation.
+```{r}
+prior_summary(model)
+```
+
+
+```{r}
+# Load required libraries
+library(rstan)
+
+summary(model)
+
+
+```
+
+Produce a tidy() summary of this model. Interpret the non-intercept coefficients’ posterior median values in context.
+```{r}
+tidy_summary <- tidy(model)
+print(tidy_summary)
+```
+
+```{r}
+library(broom.mixed) 
+summary_output <- tidy(model, conf.int = TRUE, conf.level = 0.9) 
+print(summary_output)
+```
+
+For the coefficient of the predictor variable "bill_length_mm," the posterior median value is approximately 1.691196, with a standard error of 0.1065277. This indicates that for every one-unit increase in the bill length of penguins, the model predicts an average increase of approximately 1.69 units in the flipper length. The credible interval for this coefficient, with a 90% confidence level, ranges from approximately 1.52064 to 1.856442. This suggests that there is strong evidence to support the conclusion that penguins with longer bills tend to have longer flippers, as the credible interval does not include zero.
+In summary, the non-intercept coefficient for "bill_length_mm" provides evidence of a positive and statistically significant relationship between bill length and flipper length in penguins, as indicated by the posterior median value and the credible interval.
+
+Simulate, plot, and describe the posterior predictive model for the body mass of an Adelie penguin that has a flipper length of 197.
+```{r}
+newdata <- data.frame(flipper_length_mm = 197, species = "Adelie")
+newdata$species <- as.numeric(newdata$species)
+
+# Simulate the posterior predictive model for the body mass of an Adelie penguin with a flipper length of 197
+
+
+model_fit <- brm(flipper_length_mm ~ species, data = penguins_bayes, family = gaussian())
+
+# Use the corrected new data in the posterior_predict() function
+posterior_predict <- posterior_predict(model_fit, newdata = penguins_bayes)
+
+# Plot the posterior predictive distribution
+hist(posterior_predict, main = "Posterior Predictive Model for Adelie Penguin Body Mass", xlab = "Body Mass (g)", col = "lightblue", border = "black")
+
+# Describe the range and central tendency of the predicted body masses
+summary(posterior_predict)
+```
+
+Problem 6:
+
+Explore how the number of eagle sightings in Ontario, Canada has changed over time. Since this context is unfamiliar to us, we’ll utilize weakly informative priors throughout. We’ll balance this prior uncertainty by the bald_eagles data in the bayesrules package, which includes data on bald eagle sightings during 37 different one-week observation periods. First, get to know this data.
+
+Construct and discuss a univariate plot of count, the number of eagle sightings across the observation periods.
+```{r}
+data("bald_eagles")
+head(bald_eagles)
+```
+```{r}
+summary(bald_eagles)
+```
+
+```{r}
+ggplot(bald_eagles, aes(x=count)) +
+  geom_histogram(binwidth = 1, fill='blue', alpha=0.5, color='black') +
+  theme_minimal() +
+  labs(x="Number of Eagle Sightings", y="Frequency", title="Distribution of Eagle Sightings")
+```
+
+The most frequency occurs from 0 to 3 bald eagle sightings. This means it is rare to see a bald eagle.
+
+Construct and discuss a plot of count versus year.
+```{r}
+ggplot(bald_eagles, aes(x=year, y=count)) +
+  geom_point() +
+  theme_minimal() +
+  labs(x="Year", y="Number of Eagle Sightings", title="Eagle Sightings Over the Years")
+```
+
+It seems as though the number of bald eagle sightings have increased over the years.
+
+In exploring the number of eagle sightings over time, it’s important to consider the fact that the length of the observation periods vary from year to year, ranging from 134 to 248.75 hours. Update your plot to also include information about the observation length in hours and comment on your findings.
+```{r}
+ggplot(bald_eagles, aes(x=year, y=count, color=hours)) +
+  geom_point() +
+  scale_color_gradient(low = "blue", high = "red") +
+  theme_minimal() +
+  labs(x="Year", y="Number of Eagle Sightings", color="Observation Length (hours)", title="Eagle Sightings Over the Years")
+```
+
+It seems as though the reason there were more bald eagle sightings over the years was because the observation periods became longer.
+
+Problem 7:
+
+Our next goal is to model the relationship between bald eagle counts Y by year X1 when controlling for the number of observation hours  X2.To begin, consider a Normal regression model of Y versus X1 and X2.
+
+Simulate the model posterior and check the prior_summary().
+```{r}
+library(brms)
+
+# Define the priors
+priors <- c(prior(normal(0,10), class = "b"),
+            prior(normal(0,10), class = "Intercept"),
+            prior(cauchy(0,10), class = "sigma"))
+
+# Fit the model
+model <- brm(count ~ year + hours, data = bald_eagles, family = gaussian(), prior = priors)
+
+```
+
+```{r}
+prior_summary(model)
+```
+
+The prior_summary() output suggests that your model uses non-informative priors for the regression coefficients of hours and year, a weakly informative Student's t prior for the intercept, and another weakly informative Student's prior for the residual standard deviation (sigma). This aligns with the idea of using weakly informative priors to balance prior uncertainty with the data.
+
+Use careful notation to write out the complete Bayesian structure of the Normal regression model of Y by X1 and X2.
+The complete Bayesian structure of the Normal regression model of Y by X1 and X2
+can be written as follows: 
+-Likelihood: Yi∼Normal(μi,σ), where μi=β0+β1X1i+β2X2i for each observation i
+-Priors: β0∼Normal(0,10),
+β1∼Normal(0,10),
+β2∼Normal(0,10).
+σ∼HalfNormal(0,10)
+
+Complete a pp_check() for the Normal model. Use this to explain whether the model is “good” and, if not, what assumptions it makes that are inappropriate for the bald eagle analysis.
+```{r}
+pp_check(model)
+```
+
+The simulated data and the observed data seem to have some noticeable differences. This indicated our model might not be th best choice.
+
